@@ -23,8 +23,9 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2, // Bumped version for schema change
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -111,6 +112,7 @@ class DBHelper {
         question_id INTEGER NOT NULL,
         wrong_count INTEGER DEFAULT 1,
         is_manual INTEGER DEFAULT 0,
+        notes TEXT,
         added_at TEXT NOT NULL,
         last_reviewed_at TEXT
       )
@@ -131,6 +133,12 @@ class DBHelper {
     await db.insert('categories', {'name': 'Mat', 'type': 'SUBJECT', 'icon': '🧠', 'created_at': now});
 
     await _insertSampleQuestionsInternal(db, now);
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute('ALTER TABLE mistake_copy ADD COLUMN notes TEXT');
+    }
   }
 
   Future<void> _insertSampleQuestionsInternal(Database db, String now) async {
@@ -212,7 +220,7 @@ class DBHelper {
       await db.insert('questions', {
         ...q,
         'is_custom': 0,
-        'created_by': 0,
+        'created_by': 0 0,
         'created_at': now,
       });
     }
@@ -232,7 +240,7 @@ class DBHelper {
 
   // ==================== FIXED METHODS ====================
 
-  /// Add a new category with optional icon (matches UI calling pattern)
+  /// Add a new category with optional icon
   Future<int> addCategory(String name, String type, int? parentId, {String? icon}) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -261,6 +269,40 @@ class DBHelper {
   Future<void> markAsMastered(int id) async {
     final db = await database;
     await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Get mistake copy entries for a user with optional source filter
+  Future<List<Map<String, dynamic>>> getMistakeCopy(int userId, {String? source}) async {
+    final db = await database;
+    String whereClause = 'user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (source != null && source.isNotEmpty) {
+      // source can filter by is_manual: 'manual' or 'auto'
+      if (source == 'manual') {
+        whereClause += ' AND is_manual = 1';
+      } else if (source == 'auto') {
+        whereClause += ' AND is_manual = 0';
+      }
+    }
+
+    return await db.query(
+      'mistake_copy',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'added_at DESC',
+    );
+  }
+
+  /// Update notes for a mistake copy entry
+  Future<void> updateMistakeNotes(int id, String notes) async {
+    final db = await database;
+    await db.update(
+      'mistake_copy',
+      {'notes': notes},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
   // ==================== QUERY METHODS ====================
