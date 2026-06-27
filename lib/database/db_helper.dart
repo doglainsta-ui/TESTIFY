@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
-import '../models/question_model.dart';
 
 class DBHelper {
   static final DBHelper _instance = DBHelper._internal();
@@ -23,7 +22,7 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 2, // Bumped version for schema change
+      version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
@@ -139,6 +138,9 @@ class DBHelper {
     if (oldVersion < 2) {
       await db.execute('ALTER TABLE mistake_copy ADD COLUMN notes TEXT');
     }
+    if (oldVersion < 3) {
+      // Version 3 adds last_wrong_date implicitly via added_at
+    }
   }
 
   Future<void> _insertSampleQuestionsInternal(Database db, String now) async {
@@ -220,7 +222,7 @@ class DBHelper {
       await db.insert('questions', {
         ...q,
         'is_custom': 0,
-        'created_by': 0 0,
+        'created_by': 0,
         'created_at': now,
       });
     }
@@ -238,9 +240,8 @@ class DBHelper {
     await _insertSampleQuestionsInternal(db, now);
   }
 
-  // ==================== FIXED METHODS ====================
+  // ==================== CATEGORY METHODS ====================
 
-  /// Add a new category with optional icon
   Future<int> addCategory(String name, String type, int? parentId, {String? icon}) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -252,60 +253,6 @@ class DBHelper {
       'created_at': now,
     });
   }
-
-  /// Add a new question
-  Future<int> addQuestion(Map<String, dynamic> question) async {
-    final db = await database;
-    return await db.insert('questions', question);
-  }
-
-  /// Remove a mistake copy entry by its id
-  Future<void> removeFromMistakeCopy(int id) async {
-    final db = await database;
-    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
-  }
-
-  /// Mark a mistake as mastered (remove from mistake copy)
-  Future<void> markAsMastered(int id) async {
-    final db = await database;
-    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
-  }
-
-  /// Get mistake copy entries for a user with optional source filter
-  Future<List<Map<String, dynamic>>> getMistakeCopy(int userId, {String? source}) async {
-    final db = await database;
-    String whereClause = 'user_id = ?';
-    List<dynamic> whereArgs = [userId];
-
-    if (source != null && source.isNotEmpty) {
-      // source can filter by is_manual: 'manual' or 'auto'
-      if (source == 'manual') {
-        whereClause += ' AND is_manual = 1';
-      } else if (source == 'auto') {
-        whereClause += ' AND is_manual = 0';
-      }
-    }
-
-    return await db.query(
-      'mistake_copy',
-      where: whereClause,
-      whereArgs: whereArgs,
-      orderBy: 'added_at DESC',
-    );
-  }
-
-  /// Update notes for a mistake copy entry
-  Future<void> updateMistakeNotes(int id, String notes) async {
-    final db = await database;
-    await db.update(
-      'mistake_copy',
-      {'notes': notes},
-      where: 'id = ?',
-      whereArgs: [id],
-    );
-  }
-
-  // ==================== QUERY METHODS ====================
 
   Future<List<Map<String, dynamic>>> getSubjects() async {
     final db = await database;
@@ -322,6 +269,13 @@ class DBHelper {
     return await db.query('categories', where: 'type = ? AND parent_id = ?', whereArgs: ['SUBTOPIC', topicId]);
   }
 
+  // ==================== QUESTION METHODS ====================
+
+  Future<int> addQuestion(Map<String, dynamic> question) async {
+    final db = await database;
+    return await db.insert('questions', question);
+  }
+
   Future<int> insertCustomQuestion(Map<String, dynamic> row) async {
     final db = await database;
     return await db.insert('questions', row);
@@ -332,20 +286,74 @@ class DBHelper {
     return await db.query('questions', where: 'is_custom = 1', orderBy: 'id DESC');
   }
 
-  Future<Map<String, dynamic>?> getUser(int id) async {
+  // ==================== MISTAKE COPY METHODS ====================
+
+  /// Get mistake copy entries with full question data joined
+  Future<List<Map<String, dynamic>>> getMistakeCopy(int userId, {String? source}) async {
     final db = await database;
-    final results = await db.query('users', where: 'id = ?', whereArgs: [id]);
-    return results.isNotEmpty ? results.first : null;
+
+    String whereClause = 'mc.user_id = ?';
+    List<dynamic> whereArgs = [userId];
+
+    if (source != null && source.isNotEmpty && source != 'ALL') {
+      if (source == 'MANUAL') {
+        whereClause += ' AND mc.is_manual = 1';
+      } else if (source == 'AUTO') {
+        whereClause += ' AND mc.is_manual = 0';
+      }
+    }
+
+    final results = await db.rawQuery('''
+      SELECT 
+        mc.id,
+        mc.user_id,
+        mc.question_id,
+        mc.wrong_count,
+        mc.is_manual,
+        mc.notes,
+        mc.added_at,
+        mc.last_reviewed_at,
+        q.question_text,
+        q.option_a,
+        q.option_b,
+        q.option_c,
+        q.option_d,
+        q.option_e,
+        q.correct_option,
+        q.explanation,
+        q.difficulty
+      FROM mistake_copy mc
+      INNER JOIN questions q ON mc.question_id = q.id
+      WHERE $whereClause
+      ORDER BY mc.added_at DESC
+    ''', whereArgs);
+
+    // Transform to match UI expectations
+    return results.map((row) => {
+      ...row,
+      'source': row['is_manual'] == 1 ? 'MANUAL' : 'AUTO',
+      'last_wrong_date': row['added_at'],
+    }).toList();
   }
 
-  Future<int> startTestAttempt(Map<String, dynamic> row) async {
+  Future<void> updateMistakeNotes(int id, String notes) async {
     final db = await database;
-    return await db.insert('test_attempts', row);
+    await db.update(
+      'mistake_copy',
+      {'notes': notes},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
   }
 
-  Future<int> saveAttemptDetail(Map<String, dynamic> row) async {
+  Future<void> markAsMastered(int id) async {
     final db = await database;
-    return await db.insert('attempt_details', row);
+    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
+  }
+
+  Future<void> removeFromMistakeCopy(int id) async {
+    final db = await database;
+    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
   }
 
   Future<void> recordWrongAnswer(int userId, int questionId) async {
@@ -362,7 +370,10 @@ class DBHelper {
       final currentCount = existing.first['wrong_count'] as int;
       await db.update(
         'mistake_copy',
-        {'wrong_count': currentCount + 1},
+        {
+          'wrong_count': currentCount + 1,
+          'added_at': now,
+        },
         where: 'id = ?',
         whereArgs: [existing.first['id']],
       );
@@ -403,6 +414,24 @@ class DBHelper {
         whereArgs: [existing.first['id']],
       );
     }
+  }
+
+  // ==================== USER & TEST METHODS ====================
+
+  Future<Map<String, dynamic>?> getUser(int id) async {
+    final db = await database;
+    final results = await db.query('users', where: 'id = ?', whereArgs: [id]);
+    return results.isNotEmpty ? results.first : null;
+  }
+
+  Future<int> startTestAttempt(Map<String, dynamic> row) async {
+    final db = await database;
+    return await db.insert('test_attempts', row);
+  }
+
+  Future<int> saveAttemptDetail(Map<String, dynamic> row) async {
+    final db = await database;
+    return await db.insert('attempt_details', row);
   }
 
   Future<void> updateUserStats(int userId) async {
