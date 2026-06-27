@@ -36,9 +36,9 @@ class DBHelper {
       CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         name TEXT NOT NULL,
-        type TEXT NOT NULL, -- 'SUBJECT', 'TOPIC', 'SUBTOPIC'
+        type TEXT NOT NULL,
         parent_id INTEGER,
-        icon TEXT, -- For subjects
+        icon TEXT,
         created_at TEXT NOT NULL
       )
     ''');
@@ -53,14 +53,14 @@ class DBHelper {
         option_c TEXT NOT NULL,
         option_d TEXT NOT NULL,
         option_e TEXT,
-        correct_option TEXT NOT NULL, -- 'A', 'B', 'C', 'D', 'E'
+        correct_option TEXT NOT NULL,
         explanation TEXT,
         subject_id INTEGER NOT NULL,
         topic_id INTEGER NOT NULL,
         subtopic_id INTEGER,
-        difficulty TEXT NOT NULL, -- 'EASY', 'MEDIUM', 'HARD'
-        is_custom INTEGER DEFAULT 0, -- 1 for user added
-        created_by INTEGER DEFAULT 0, -- 0 for system, user_id for custom
+        difficulty TEXT NOT NULL,
+        is_custom INTEGER DEFAULT 0,
+        created_by INTEGER DEFAULT 0,
         created_at TEXT NOT NULL
       )
     ''');
@@ -86,7 +86,7 @@ class DBHelper {
       CREATE TABLE test_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL,
-        test_type TEXT NOT NULL, -- 'PRACTICE', 'EXAM'
+        test_type TEXT NOT NULL,
         test_name TEXT NOT NULL,
         total_questions INTEGER NOT NULL,
         correct_count INTEGER NOT NULL,
@@ -104,7 +104,7 @@ class DBHelper {
         attempt_id INTEGER NOT NULL,
         question_id INTEGER NOT NULL,
         selected_option TEXT,
-        is_correct INTEGER NOT NULL, -- 0 or 1
+        is_correct INTEGER NOT NULL,
         time_taken_sec INTEGER DEFAULT 0
       )
     ''');
@@ -116,7 +116,7 @@ class DBHelper {
         user_id INTEGER NOT NULL,
         question_id INTEGER NOT NULL,
         wrong_count INTEGER DEFAULT 1,
-        is_manual INTEGER DEFAULT 0, -- 1 if explicitly added by user
+        is_manual INTEGER DEFAULT 0,
         added_at TEXT NOT NULL,
         last_reviewed_at TEXT
       )
@@ -138,11 +138,9 @@ class DBHelper {
     await db.insert('categories', {'name': 'English', 'type': 'SUBJECT', 'icon': '🇬🇧', 'created_at': now});
     await db.insert('categories', {'name': 'Mat', 'type': 'SUBJECT', 'icon': '🧠', 'created_at': now});
 
-    // Automatically trigger sample data generation right after tables finish creating!
     await _insertSampleQuestionsInternal(db, now);
   }
 
-  // --- Helper to execute sample insertion on creation ---
   Future<void> _insertSampleQuestionsInternal(Database db, String now) async {
     final subjects = await db.query('categories', where: 'type = ?', whereArgs: ['SUBJECT']);
     final mathId = subjects.firstWhere((s) => s['name'] == 'Mathematics')['id'];
@@ -228,7 +226,6 @@ class DBHelper {
     }
   }
 
-  // --- External method for standalone execution ---
   Future<void> insertSampleQuestions() async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
@@ -241,7 +238,22 @@ class DBHelper {
     await _insertSampleQuestionsInternal(db, now);
   }
 
-  // --- Application Query Methods ---
+  // ==================== ADDED METHODS ====================
+
+  /// Insert a new category (Subject, Topic, or Subtopic)
+  Future<int> addCategory(Map<String, dynamic> category) async {
+    final db = await database;
+    return await db.insert('categories', category);
+  }
+
+  /// Insert a new question
+  Future<int> addQuestion(Map<String, dynamic> question) async {
+    final db = await database;
+    return await db.insert('questions', question);
+  }
+
+  // ==================== QUERY METHODS ====================
+
   Future<List<Map<String, dynamic>>> getSubjects() async {
     final db = await database;
     return await db.query('categories', where: 'type = ?', whereArgs: ['SUBJECT']);
