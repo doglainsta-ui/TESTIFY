@@ -26,7 +26,7 @@ class MyApp extends StatelessWidget {
           seedColor: Colors.green,
           primary: Colors.green,
         ),
-        useMaterialDesign3: true,
+        useMaterial3: true,
         appBarTheme: const AppBarTheme(
           centerTitle: false,
           backgroundColor: Colors.transparent,
