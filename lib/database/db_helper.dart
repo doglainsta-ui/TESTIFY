@@ -31,7 +31,6 @@ class DBHelper {
   Future<void> _onCreate(Database db, int version) async {
     final now = DateTime.now().toIso8601String();
 
-    // 1. Categories Table (Subjects, Topics, Subtopics)
     await db.execute('''
       CREATE TABLE categories (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,7 +42,6 @@ class DBHelper {
       )
     ''');
 
-    // 2. Questions Table
     await db.execute('''
       CREATE TABLE questions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +63,6 @@ class DBHelper {
       )
     ''');
 
-    // 3. Users Table
     await db.execute('''
       CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,7 +78,6 @@ class DBHelper {
       )
     ''');
 
-    // 4. Test Attempts Table
     await db.execute('''
       CREATE TABLE test_attempts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -97,7 +93,6 @@ class DBHelper {
       )
     ''');
 
-    // 5. Attempt Details Table
     await db.execute('''
       CREATE TABLE attempt_details (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -109,7 +104,6 @@ class DBHelper {
       )
     ''');
 
-    // 6. Mistake Copy Table
     await db.execute('''
       CREATE TABLE mistake_copy (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -122,7 +116,6 @@ class DBHelper {
       )
     ''');
 
-    // Insert Default User
     await db.insert('users', {
       'name': 'Test User',
       'email': 'user@testify.com',
@@ -130,7 +123,6 @@ class DBHelper {
       'joined_date': now,
     });
 
-    // Insert Default Subjects
     await db.insert('categories', {'name': 'Mathematics', 'type': 'SUBJECT', 'icon': '🧮', 'created_at': now});
     await db.insert('categories', {'name': 'Physics', 'type': 'SUBJECT', 'icon': '⚛️', 'created_at': now});
     await db.insert('categories', {'name': 'Chemistry', 'type': 'SUBJECT', 'icon': '🧪', 'created_at': now});
@@ -238,18 +230,30 @@ class DBHelper {
     await _insertSampleQuestionsInternal(db, now);
   }
 
-  // ==================== ADDED METHODS ====================
+  // ==================== FIXED METHODS ====================
 
-  /// Insert a new category (Subject, Topic, or Subtopic)
-  Future<int> addCategory(Map<String, dynamic> category) async {
+  /// Add a new category (matches UI calling pattern)
+  Future<int> addCategory(String name, String type, int? parentId) async {
     final db = await database;
-    return await db.insert('categories', category);
+    final now = DateTime.now().toIso8601String();
+    return await db.insert('categories', {
+      'name': name,
+      'type': type,
+      'parent_id': parentId,
+      'created_at': now,
+    });
   }
 
-  /// Insert a new question
+  /// Add a new question
   Future<int> addQuestion(Map<String, dynamic> question) async {
     final db = await database;
     return await db.insert('questions', question);
+  }
+
+  /// Remove a mistake copy entry by its id
+  Future<void> removeFromMistakeCopy(int id) async {
+    final db = await database;
+    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
   }
 
   // ==================== QUERY METHODS ====================
