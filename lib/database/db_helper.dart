@@ -22,9 +22,8 @@ class DBHelper {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 1,
       onCreate: _onCreate,
-      onUpgrade: _onUpgrade,
     );
   }
 
@@ -132,15 +131,6 @@ class DBHelper {
     await db.insert('categories', {'name': 'Mat', 'type': 'SUBJECT', 'icon': '🧠', 'created_at': now});
 
     await _insertSampleQuestionsInternal(db, now);
-  }
-
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      await db.execute('ALTER TABLE mistake_copy ADD COLUMN notes TEXT');
-    }
-    if (oldVersion < 3) {
-      // Version 3 adds last_wrong_date implicitly via added_at
-    }
   }
 
   Future<void> _insertSampleQuestionsInternal(Database db, String now) async {
@@ -288,7 +278,6 @@ class DBHelper {
 
   // ==================== MISTAKE COPY METHODS ====================
 
-  /// Get mistake copy entries with full question data joined
   Future<List<Map<String, dynamic>>> getMistakeCopy(int userId, {String? source}) async {
     final db = await database;
 
@@ -328,7 +317,6 @@ class DBHelper {
       ORDER BY mc.added_at DESC
     ''', whereArgs);
 
-    // Transform to match UI expectations
     return results.map((row) => {
       ...row,
       'source': row['is_manual'] == 1 ? 'MANUAL' : 'AUTO',
