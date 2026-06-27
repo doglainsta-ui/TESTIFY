@@ -232,14 +232,15 @@ class DBHelper {
 
   // ==================== FIXED METHODS ====================
 
-  /// Add a new category (matches UI calling pattern)
-  Future<int> addCategory(String name, String type, int? parentId) async {
+  /// Add a new category with optional icon (matches UI calling pattern)
+  Future<int> addCategory(String name, String type, int? parentId, {String? icon}) async {
     final db = await database;
     final now = DateTime.now().toIso8601String();
     return await db.insert('categories', {
       'name': name,
       'type': type,
       'parent_id': parentId,
+      'icon': icon,
       'created_at': now,
     });
   }
@@ -252,6 +253,12 @@ class DBHelper {
 
   /// Remove a mistake copy entry by its id
   Future<void> removeFromMistakeCopy(int id) async {
+    final db = await database;
+    await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
+  }
+
+  /// Mark a mistake as mastered (remove from mistake copy)
+  Future<void> markAsMastered(int id) async {
     final db = await database;
     await db.delete('mistake_copy', where: 'id = ?', whereArgs: [id]);
   }
